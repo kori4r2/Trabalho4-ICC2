@@ -127,6 +127,23 @@ FILE *open_data(SCHEMA *schema, char *mode, int *size){
 	return fp_data;
 }
 
+FILE *open_temp(SCHEMA *schema, char *mode){
+	FILE *fp_temp;
+	char *filename_temp;
+
+	filename_temp = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+	strcpy(filename_temp, schema->name);
+	strcat(filename_temp, ".temp");
+	fp_temp = fopen(filename_temp, mode);
+	if(fp_temp == NULL){
+		fprintf(stderr, "could not open temp file\n");
+		exit(1);
+	}
+
+	free(filename_temp);
+	return fp_temp;
+}
+
 // Recebe as informações de um elemento da stdin e salva em fp_data com dist == 0.0
 void save_item(FILE *fp_data, SCHEMA *schema, int id){
 	int i;
@@ -149,7 +166,6 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 		}else if(node->id == STRING_T){
 			memset(aux, 0, node->size);
 			copy_sized_string_input(stdin, aux, node->size);
-//			fprintf(stdout, "string lida %s\n", (char*)(aux));
 		}
 
 		fwrite(aux, node->size, 1, fp_data);
@@ -604,7 +620,7 @@ void dump_data(SCHEMA *schema){
 	free_string_list(item, schema->n_elements);
 }
 
-void copy_data_from_file(FILE *origin, FILE *destiny, SCHEMA *schema, NODE *node, int n_elements){
+void copy_data_to_index(FILE *origin, FILE *destiny, SCHEMA *schema, NODE *node, int n_elements){
 
 	long int location;
 	int i;
@@ -645,8 +661,8 @@ void get_index(SCHEMA *schema){
 			// Caso seja necessario, o arquivo .data é aberto para leitura
 			fp_data = open_data(schema, "rb", &n_elements);
 
-			// A funcao copy_data_from_file() é utilizada para copiar a memoria diretamente de um arquivo para o outro
-			copy_data_from_file(fp_data, fp_index, schema, node, n_elements-1);
+			// A funcao copy_data_to_index() é utilizada para copiar a memoria diretamente de um arquivo para o outro
+			copy_data_to_index(fp_data, fp_index, schema, node, n_elements-1);
 
 			// E toda a memoria alocada é liberada
 			fclose(fp_data);
@@ -886,20 +902,20 @@ void search_index_data(SCHEMA *schema){
 	free(print_field);
 }
 
-void get_distance(FILE *fp_data, SCHEMA *schema, int n_elements, long int cur_offset){
+void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_offset){
 	NODE *node = schema->sentry->next;
 	int i;
 	void *aux1 = malloc(sizeof(double));
 	void *aux2 = malloc(sizeof(double));
 	double distance = 0;
 
-	for(i = 0; i < schema->n_elements-1; i++){
+	for(i = 0; i < schema->n_elements-2; i++){
 		node = node->next;
 		if(node->id == INT_T || node->id == DOUBLE_T){
 			fseek(fp_data, cur_offset+node->offset, SEEK_SET);
 			fread(aux1, node->size, 1, fp_data);
-			fseek(fp_data, ((n_elements-1)*schema->size)+node->offset, SEEK_SET);
-			fread(aux2, node->size, 1, fp_data);
+			fseek(fp_temp, node->offset, SEEK_SET);
+			fread(aux2, node->size, 1, fp_temp);
 		}
 		if(node->id == INT_T){
 			distance += pow((double)( (*((int*)aux1)) - (*((int*)aux2)) ), 2);
@@ -909,6 +925,7 @@ void get_distance(FILE *fp_data, SCHEMA *schema, int n_elements, long int cur_of
 	}
 	free(aux1);
 	free(aux2);
+	node = node->next;
 	distance = sqrt(distance);
 	fseek(fp_data, cur_offset+node->offset, SEEK_SET);
 	fwrite(&distance, node->size, 1, fp_data);
@@ -917,11 +934,13 @@ void get_distance(FILE *fp_data, SCHEMA *schema, int n_elements, long int cur_of
 void update_distances(SCHEMA *schema){
 	int i, n_elements;
 	FILE *fp_data = open_data(schema, "r+b", &n_elements);
+	FILE *fp_temp = open_temp(schema, "rb");
 
 	for(i = 0; i < n_elements; i++){
-		get_distance(fp_data, schema, n_elements, i*schema->size);
+		get_distance(fp_data, fp_temp, schema, i*schema->size);
 	}
 
+	fclose(fp_temp);
 	fclose(fp_data);
 }
 
@@ -946,7 +965,9 @@ void dump_nn(SCHEMA *schema, int number){
 	do{
 		// Para encontrar a localização do elemento mais proximo, ja se sabe que o tamano da informacao salva eh de double
 		fseek(fp_index, (i*(sizeof(double)+sizeof(long int))) + sizeof(double), SEEK_SET);
+		// Le a localização do elemento dentro do .data
 		fread(&location, sizeof(long int), 1, fp_index);
+		// Vai no .data, le o elemento e o imprime na stdout
 		get_item(item, schema, location/schema->size, &n_elements);
 		print_item(schema, item);
 		i++;
@@ -954,4 +975,26 @@ void dump_nn(SCHEMA *schema, int number){
 
 	fclose(fp_index);
 	free_string_list(item, schema->n_elements);
+}
+
+void save_temporary_input(SCHEMA *schema){
+	int i;
+	void *aux;
+	NODE *node = schema->sentry;
+	FILE *fp_temp = open_temp(schema, "wb");
+
+	for(i = 0; i < schema->n_elements-2; i++){
+		node = node->next;
+		aux = malloc(node->size);
+
+		if(node->id == INT_T){
+			scanf("%d", (int*)(aux));
+		}else if(node->id == DOUBLE_T){
+			scanf("%lf", (double*)(aux));
+		}
+
+		fwrite(aux, node->size, 1, fp_temp);
+		free(aux);
+	}
+	fclose(fp_temp);
 }

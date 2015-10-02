@@ -24,6 +24,7 @@ nome3
 5.0
 nome4
 -1
+dump_data
 dump_schema
 dump_nn
 2
@@ -32,5 +33,4 @@ dump_nn
 3.0
 2.0
 1.0
-nome5
 exit

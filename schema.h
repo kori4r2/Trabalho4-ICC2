@@ -173,4 +173,14 @@ void update_distances(SCHEMA*);
 */
 void dump_nn(SCHEMA *schema, int number);
 
+/*------------------------------------------------------------------------------------------------------------
+   Nome()
+        Descricao
+        - Parametros
+          tipo : descricao
+        - Retorno
+          tipo : descricao
+*/
+void save_temporary_input(SCHEMA *schema);
+
 #endif

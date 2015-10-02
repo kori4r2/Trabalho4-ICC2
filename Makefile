@@ -19,3 +19,5 @@ run:
 
 .zip:
 	zip trabalho4.zip *.c *.h Makefile
+debug:
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./program < case.in

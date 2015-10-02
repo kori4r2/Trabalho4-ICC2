@@ -30,9 +30,8 @@ int main(int argc, char *argv[]){
 		}else if(strcmp(input, "dump_data") == 0){
 			dump_data(schema);
 		}else if(strcmp(input, "dump_nn") == 0){
-//			dump_nn(schema);
 			scanf("%d", &aux);
-			insert_data(schema);
+			save_temporary_input(schema);
 			update_distances(schema);
 			get_index(schema);
 			sort_index(schema);
