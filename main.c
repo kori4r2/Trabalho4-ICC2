@@ -40,9 +40,6 @@ int main(int argc, char *argv[]){
 //			knn(schema);
 			scanf("%d", &aux);
 			save_temporary_input(schema);
-			update_distances(schema);
-			get_index(schema);
-			sort_index(schema);
 			get_class(schema, aux);
 		}else if(strcmp(input, "exit") == 0){
 			// Caso seja digitado "exit", repeat recebe 0, saindo do loop

@@ -80,11 +80,12 @@ void get_node(NODE *node, char *line){
 */
 }
 
+// Funcao que abre o arquivo .idx do tipo pedido no modo desejado, alterando o parametro size para indicar quantos elementos
+// estao salvos dentro do arquivo
 FILE *open_index(SCHEMA *schema, NODE *node, char *mode, int *size){
 	FILE *fp_index;
 	char *filename_index;
 	long int end_file;
-	
 
 	filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
 	strcpy(filename_index, schema->name);
@@ -105,6 +106,8 @@ FILE *open_index(SCHEMA *schema, NODE *node, char *mode, int *size){
 	return fp_index;
 }
 
+// Funcao que abre o arquivo .data no modo desejado, alterando o parametro size para indicar quantos elementos
+// estao salvos dentro do arquivo
 FILE *open_data(SCHEMA *schema, char *mode, int *size){
 	FILE *fp_data;
 	char *filename_data;
@@ -127,6 +130,7 @@ FILE *open_data(SCHEMA *schema, char *mode, int *size){
 	return fp_data;
 }
 
+// Funcao que abre o arquivo .temp no modo desejado
 FILE *open_temp(SCHEMA *schema, char *mode){
 	FILE *fp_temp;
 	char *filename_temp;
@@ -163,6 +167,7 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 		}else if(node->id == DOUBLE_T){
 			scanf("%lf", (double*)(aux));
 		}else if(node->id == STRING_T){
+			// Funcao de my_strings.h
 			copy_sized_string_input(stdin, aux, node->size);
 		}
 
@@ -590,6 +595,7 @@ void dump_schema(SCHEMA *schema){
 	}
 }
 
+// Funcao que recebe as informacoes do arquivo .data da stdin com excecao do campo dist e escreve o arquivo de acordo com o que for passado
 void get_data(SCHEMA *schema){
 	int aux, id;
 	FILE *fp_data = open_data(schema, "wb", &aux);
@@ -873,6 +879,11 @@ void search_index_data(SCHEMA *schema){
 	free(print_field);
 }
 
+/*
+ Essa funcao recebe ponteiro para o .data, ponteiro para o arquivo .temp contendo o elemento que sera utilizado para o calculo da distancia
+ e um offset correspondente a posicao de um elemento dentro do .data para calcular a distancia ele esse elemento e o contido em .temp,
+ substituindo o valor de dist depois
+*/
 void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_offset){
 	NODE *node = schema->sentry->next;
 	int i;
@@ -883,35 +894,45 @@ void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_off
 	// Analisa todos os elementos a partir do segundo (ignora id) ate antes da classe
 	for(i = 0; i < schema->n_elements-3; i++){
 		node = node->next;
+		// Caso o campo seja do tipo int ou double, le o conteudo do arquivo temp e do campo data na posicao atual
 		if(node->id == INT_T || node->id == DOUBLE_T){
 			fseek(fp_data, cur_offset+node->offset, SEEK_SET);
 			fread(aux1, node->size, 1, fp_data);
 			fseek(fp_temp, node->offset, SEEK_SET);
 			fread(aux2, node->size, 1, fp_temp);
 		}
+		// Incrementa a variavel distance pelo quadrado da diferenca entre os valores
 		if(node->id == INT_T){
 			distance += pow((double)( (*((int*)aux1)) - (*((int*)aux2)) ), 2);
 		}else if(node->id == DOUBLE_T){
 			distance += pow( (*((double*)aux1)) - (*((double*)aux2)), 2);
 		}
 	}
+	// Libera a memoria alocada
 	free(aux1);
 	free(aux2);
-	node = node->next->next;
+	// Distancia recebe a raiz quadrada do somatorio feito ate agora
 	distance = sqrt(distance);
+	// node recebe as informacoes do campo dist
+	node = schema->sentry->previous;
+	// E salva a distancia calculada no elemento analisado atualmente no .data
 	fseek(fp_data, cur_offset+node->offset, SEEK_SET);
 	fwrite(&distance, node->size, 1, fp_data);
 }
 
+// Essa funcao usa a funcao get_distance para atualizar o valor de todas as distancias do .data
 void update_distances(SCHEMA *schema){
 	int i, n_elements;
 	FILE *fp_data = open_data(schema, "r+b", &n_elements);
 	FILE *fp_temp = open_temp(schema, "rb");
 
+	// Percorre os elementos do .data
 	for(i = 0; i < n_elements; i++){
+		// Chama get_distance passando o offset do elemento na i-esima posicao
 		get_distance(fp_data, fp_temp, schema, i*schema->size);
 	}
 
+	// Libera memoria alocada
 	fclose(fp_temp);
 	fclose(fp_data);
 }
@@ -920,12 +941,16 @@ void dump_nn(SCHEMA *schema, int number){
 	int i, n_elements;
 	long int location;
 
+	// O arquivo index do campo dist é aberto
 	FILE *fp_index = open_index(schema, schema->sentry->previous, "rb", &n_elements);
+	// item armazena as informacoes do item sendo lido
 	char **item = (char**)malloc(schema->n_elements * sizeof(char*));
 
+	// A memoria necessaria para cada item é alocada
 	NODE *node = schema->sentry;
 	for(i = 0; i < schema->n_elements; i++){
 		node = node->next;
+		// No caso dos numeros, é definido no .h um tamanho para eles
 		if(node->id == INT_T || node->id == DOUBLE_T){
 			item[i] = (char*)malloc(LENGTH_ITEMS * sizeof(char));
 		}else if(node->id == STRING_T){
@@ -935,7 +960,7 @@ void dump_nn(SCHEMA *schema, int number){
 
 	i = 0;
 	do{
-		// Para encontrar a localização do elemento mais proximo, ja se sabe que o tamano da informacao salva eh de double
+		// Para encontrar a localização do elemento mais proximo, ja se sabe que o tamano da informacao salva é de double
 		fseek(fp_index, (i*(sizeof(double)+sizeof(long int))) + sizeof(double), SEEK_SET);
 		// Le a localização do elemento dentro do .data
 		fread(&location, sizeof(long int), 1, fp_index);
@@ -945,6 +970,7 @@ void dump_nn(SCHEMA *schema, int number){
 		i++;
 	}while(i < n_elements && i < number);
 
+	// Libera a memoria alocada
 	fclose(fp_index);
 	free_string_list(item, schema->n_elements);
 }
@@ -955,6 +981,7 @@ void save_temporary_input(SCHEMA *schema){
 	NODE *node = schema->sentry;
 	FILE *fp_temp = open_temp(schema, "wb");
 
+	// Para todos os elementos, menos os dois ultimos (classe e distancia) le o elemento da stdin
 	for(i = 0; i < schema->n_elements-2; i++){
 		node = node->next;
 		aux = malloc(node->size);
@@ -965,14 +992,22 @@ void save_temporary_input(SCHEMA *schema){
 			scanf("%lf", (double*)(aux));
 		}
 
+		// E escreve a informacao lida no arquivo .temp criado
 		fwrite(aux, node->size, 1, fp_temp);
+		// Libera a memoria alocada
 		free(aux);
 	}
 	fclose(fp_temp);
 }
 
 void get_class(SCHEMA *schema, int n){
-	int n_elements, i, j, *counter = NULL, n_classes, max_count, draw, max_pos;
+	/* n_elements guarda quantos elementos estao dentro do .data; n_classes armazena o numero de classes lidas quando necessario;
+	max_count, max_pos e draw ajudam a fazer a contagem de que classe aparece mais vezes; class armazena as informações do campo
+	correspondente a classe; classes found armazena ponteiros void* para as classes lidas enquanto a posicao correspondente em counter
+	armazena quantas vezes essa classe foi encontrada; as demais variaveis sao variaveis auxiliares que facilitam as chamadas de funcoes
+	*/
+	int n_elements, i, j, n_classes, max_count, draw, max_pos;
+	int *counter = NULL;
 	FILE *fp_temp = open_temp(schema, "r+b");
 	FILE *fp_data = open_data(schema, "r+b", &n_elements);
 	FILE *fp_index;
@@ -982,6 +1017,7 @@ void get_class(SCHEMA *schema, int n){
 	double a, b;
 	char *aux_string = NULL;
 
+	// Esse bloco de codigo garante que o arquivo index das distancias sera criado e atualizado antes de o abrir
 	update_distances(schema);
 	get_index(schema);
 	sort_index(schema);
