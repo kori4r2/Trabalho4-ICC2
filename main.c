@@ -4,21 +4,21 @@
 
 int main(int argc, char *argv[]){
 
-	int repeat, aux;
+	int repeat, n;
 	char *input = NULL;
 
 	// A lista schema é criada e lida da stdin
 	SCHEMA *schema = create_schema();
 	get_schema(schema);
+	// Os dados sao lidos da stdin e armazenados no arquivo .data
 	get_data(schema);
 
 	do{
 		// A cada repeticao le um comando da stdin
 		repeat = 1;
-		
 		while(input == NULL){
-			input = my_get_line_valid(stdin, &aux);
-			if(aux == -2){
+			input = my_get_line_valid(stdin, &n);
+			if(n == -2){
 				fprintf(stderr, "End of file reached\n");
 				exit(5);
 			}
@@ -30,17 +30,16 @@ int main(int argc, char *argv[]){
 		}else if(strcmp(input, "dump_data") == 0){
 			dump_data(schema);
 		}else if(strcmp(input, "dump_nn") == 0){
-			scanf("%d", &aux);
+			scanf("%d", &n);
 			save_temporary_input(schema);
 			update_distances(schema);
 			get_index(schema);
 			sort_index(schema);
-			dump_nn(schema, aux);
+			dump_nn(schema, n);
 		}else if(strcmp(input, "knn") == 0){
-//			knn(schema);
-			scanf("%d", &aux);
+			scanf("%d", &n);
 			save_temporary_input(schema);
-			get_class(schema, aux);
+			get_class(schema, n);
 		}else if(strcmp(input, "exit") == 0){
 			// Caso seja digitado "exit", repeat recebe 0, saindo do loop
 			repeat = 0;

@@ -595,7 +595,6 @@ void dump_schema(SCHEMA *schema){
 	}
 }
 
-// Funcao que recebe as informacoes do arquivo .data da stdin com excecao do campo dist e escreve o arquivo de acordo com o que for passado
 void get_data(SCHEMA *schema){
 	int aux, id;
 	FILE *fp_data = open_data(schema, "wb", &aux);
@@ -920,7 +919,6 @@ void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_off
 	fwrite(&distance, node->size, 1, fp_data);
 }
 
-// Essa funcao usa a funcao get_distance para atualizar o valor de todas as distancias do .data
 void update_distances(SCHEMA *schema){
 	int i, n_elements;
 	FILE *fp_data = open_data(schema, "r+b", &n_elements);
