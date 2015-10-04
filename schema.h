@@ -183,4 +183,14 @@ void dump_nn(SCHEMA *schema, int number);
 */
 void save_temporary_input(SCHEMA *schema);
 
+/*------------------------------------------------------------------------------------------------------------
+   Nome()
+        Descricao
+        - Parametros
+          tipo : descricao
+        - Retorno
+          tipo : descricao
+*/
+void get_class(SCHEMA *schema, int n);
+
 #endif

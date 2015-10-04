@@ -147,24 +147,22 @@ FILE *open_temp(SCHEMA *schema, char *mode){
 // Recebe as informações de um elemento da stdin e salva em fp_data com dist == 0.0
 void save_item(FILE *fp_data, SCHEMA *schema, int id){
 	int i;
-//	long int data_size = schema->size - schema->sentry->next->size - schema->sentry->previous->size;
 	void *aux;
 	NODE *node = schema->sentry->next;
 	double dist = 0.0;
 
 	fseek(fp_data, 0, SEEK_END);
 	fwrite(&id, node->size, 1, fp_data);
-//	aux = malloc(data_size);
-	for(i = 0; i < schema->n_elements-2; i++){
+	for(i = 0; node->next != schema->sentry->previous; i++){
 		node = node->next;
 		aux = malloc(node->size);
+		memset(aux, 0, node->size);
 
 		if(node->id == INT_T){
 			scanf("%d", (int*)(aux));
 		}else if(node->id == DOUBLE_T){
 			scanf("%lf", (double*)(aux));
 		}else if(node->id == STRING_T){
-			memset(aux, 0, node->size);
 			copy_sized_string_input(stdin, aux, node->size);
 		}
 
@@ -172,8 +170,6 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 		free(aux);
 	}
 	node = node->previous->previous;
-//	fprintf(stdout, "hu3 : %.2lf\n", (*(double*)(aux+node->offset)) );
-//	fwrite(aux, data_size, 1, fp_data);
 	fwrite(&dist, sizeof(double), 1, fp_data);
 }
 
@@ -221,7 +217,7 @@ void print_item(SCHEMA *schema, char **item){
 
 void swap(FILE *fp, NODE *node, int i, int j){
 
-	// Data_size guarda o tamanho do bloco de memoria que contem um item e um long int de offset para cada item no .idx
+	// data_size guarda o tamanho do bloco de memoria que contem um item e um long int de offset para cada item no .idx
 	long int data_size = (node->size + sizeof(long int));
 	void *aux1 = malloc(data_size);
 	void *aux2 = malloc(data_size);
@@ -298,14 +294,30 @@ int compare_outside(NODE *node, void *check, char *key){
 	return result;
 }
 
+// Função que transforma o conteudo de um void* em uma string correspondente
+void void_to_string(NODE *node, void *aux, char **string){
+	// Se for string, apenas aloca memoria de mesmo tamanho e copia o conteudo
+	if(node->id == STRING_T){
+		(*string) = (char*)realloc((*string), node->size);
+		memcpy((*string), aux, node->size);
+	// Caso contrario aloca um tamanho pre-definido de memoria
+	}else{
+		(*string) = (char*)realloc((*string), sizeof(char) * LENGTH_ITEMS);
+		// E salva o conteudo usando snprintf
+		if(node->id == INT_T){
+			snprintf((*string), LENGTH_ITEMS, "%d", *((int*)aux));
+		}else if(node->id == DOUBLE_T){
+			snprintf((*string), LENGTH_ITEMS, "%lf", *((double*)aux));
+		}
+	}
+}
+
+
 long int sequential_search(SCHEMA *schema, NODE *node, char *search_key, int *test_count){
 	FILE *fp_data, *fp_index;
 	int i, n_elements_data, n_elements_index, compare_result;
 	void *aux;
 	
-	// O bloco de codigo abaixo abre o arquivo .data para leitura, checa se a abertura foi feita corretamente e analisa quantos elementos
-	// estao contidos no arquivo (seria melhor implementar uma funcao para isso, mas n ha tempo agora)
-
 	fp_data = open_data(schema, "rb", &n_elements_data);
 
 	// O bloco de codigo abaixo faz o mesmo que o acima, mas dessa vez para o arquivo .idx
@@ -344,7 +356,7 @@ long int sequential_search(SCHEMA *schema, NODE *node, char *search_key, int *te
 long int binary_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int begin, int end, int *test_count){
 
 	// A condicao de parada da busca eh estabelecida para depois que ela checa um bloco que contem apenas um item
-	// E o retorno para quando o item n for encontrado eh -1
+	// E o retorno para quando o item nao for encontrado eh -1
 	if(begin > end) return -1;
 
 	// Define-se o ponto medio
@@ -558,7 +570,7 @@ void dump_schema(SCHEMA *schema){
 
 		// Imprime as informacoes do registro como um todo
 		printf("%s %s(%d bytes)\n", STR_TABLE, schema->name, schema->size);
-		// Depois percorre todos os elementos com a variavel aux
+		// Depois percorre todos os elementos com a variavel node
 		for(i = 0; i < schema->n_elements; i++){
 			node = node->next;
 			// Analisa o tipo do elemento e imprime as informacoes de acordo com o que foi lido
@@ -595,7 +607,6 @@ void dump_data(SCHEMA *schema){
 	int i, n_elements;
 	// A variavel item armazenara as informacoes do elemento sendo lido
 	char **item = (char**)malloc(schema->n_elements * sizeof(char*));
-	// Mais uma vez o bloco responsavel por abrir o arquivo .data para leitura e obter o numero de elementos
 	NODE *node = schema->sentry;
 
 	// Todos os campos de item tem memoria alocada
@@ -748,7 +759,7 @@ void insert_data(SCHEMA *schema){
 
 	int i, n_elements_data;
 	double dist = 0;
-	void *aux;
+	void *aux = NULL;
 	NODE *node = schema->sentry;
 	// O arquivo .data é aberto para atualizacao
 	FILE *fp_data = open_data(schema, "r+b", &n_elements_data);
@@ -758,7 +769,7 @@ void insert_data(SCHEMA *schema){
 	for(i = 0; i < schema->n_elements-1; i++){
 		node = node->next;
 		// aux armazena os dados a serem escritos
-		aux = malloc(node->size);
+		aux = realloc(aux, node->size);
 		memset(aux, 0, node->size);
 
 		// De acordo com o tipo sendo analisado, as informações são lidas da stdin e armazendas em aux
@@ -774,8 +785,8 @@ void insert_data(SCHEMA *schema){
 		// As informacoes sao entao escritas no final do arquivo .data
 		fwrite(aux, node->size, 1, fp_data);
 		// A memoria alocada é liberada
-		if(aux != NULL) free(aux);
 	}
+	if(aux != NULL) free(aux);
 	fwrite(&dist, node->size, 1, fp_data);
 	// E o arquivo é fechado
 	fclose(fp_data);
@@ -783,10 +794,9 @@ void insert_data(SCHEMA *schema){
 
 void search_index_data(SCHEMA *schema){
 
-	int i, test_count, search_return, n_elements;
-	long int location, offset;
+	int i, j, test_count, search_return, n_elements;
 	void *aux;
-	char *filename_index, *search_term, *filename_data, *print_field, *search_key;
+	char *search_term, *print_field, *search_key;
 	NODE *node = schema->sentry;
 	FILE *fp_index, *fp_data;
 
@@ -795,30 +805,17 @@ void search_index_data(SCHEMA *schema){
 	search_key = my_get_line_valid(stdin, &i);
 	print_field = my_get_line_valid(stdin, &i);
 
-	// test_count armazena o numero de iteracoes de busca e offset armazena o offset do tipo sendo analisado em relação á posição do elemento
-	// como um todo
+	// test_count armazena o numero de iteracoes de busca
 	test_count = 0;
-	offset = 0;
 	// Sao analizados todos os elementos ate ser encontrado o que deseja-se para a busca
 	for(i = 0; i < schema->n_elements; i++){
 		node = node->next;
 		if(strcmp(search_term, node->name) == 0 && node->order){
 
 			// O arquivo .idx é aberto para leitura
-			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
-			strcpy(filename_index, schema->name);
-			strcat(filename_index, "-");
-			strcat(filename_index, node->name);
-			strcat(filename_index, ".idx");
-			fp_index = fopen(filename_index, "rb");
+			fp_index = open_index(schema, node, "rb", &n_elements);
 
 			if(fp_index != NULL){
-
-				// Analisa-se quantos elementos estão presentes no  .idx
-				fseek(fp_index, 0, SEEK_END);
-				location = ftell(fp_index);
-				n_elements = (int)(location/(sizeof(long int) + node->size));
-				fseek(fp_index, 0, SEEK_SET);
 
 				// É realizada a busca binaria
 				search_return = binary_search(fp_index, schema, node, search_key, 0, n_elements-1, &test_count);
@@ -833,8 +830,6 @@ void search_index_data(SCHEMA *schema){
 				fprintf(stderr, "could not open file\n");
 				exit(1);
 			}
-			// Liberacao da memoria alocada
-			free(filename_index);
 
 			// Imprime o numero de iteracoes da busca realizadas
 			printf("%d\n", test_count);
@@ -842,30 +837,11 @@ void search_index_data(SCHEMA *schema){
 			if(search_return == -1){
 				printf("value not found\n");
 			}else{
-				// Caso o item tenha sido encontrado, procura o offset do item a ser impresso em relação
-				// ao elemento como um todo
-				node = schema->sentry;
-				offset = 0;
-				for(i = 0; i < schema->n_elements; i++){
-					node = node->next;
-					if(strcmp(print_field, node->name) == 0){
-						break;
-					}
-					offset += node->size;
-				}
-
 				// O arquivo .data é aberto para leitura
-				filename_data = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
-				strcpy(filename_data, schema->name);
-				strcat(filename_data, ".data");
-				fp_data = fopen(filename_data, "rb");
-				if(fp_data == NULL){
-					fprintf(stderr, "could not open file\n");
-					exit(1);
-				}
+				fp_data = open_data(schema, "rb", &j);
 
 				// A variavel aux armazena o conteudo do item a ser impresso
-				fseek(fp_data, search_return+offset, SEEK_SET);
+				fseek(fp_data, search_return+node->offset, SEEK_SET);
 				aux = malloc(node->size);
 				fread(aux, node->size, 1, fp_data);
 				// E o arquivo é fechado
@@ -881,14 +857,9 @@ void search_index_data(SCHEMA *schema){
 				}
 				// E a memoria alocada é liberada
 				free(aux);
-				free(filename_data);
 			}
 			// caso o item seja encontrado, o valor de i é alterado para que saia do loop
 			i = schema->n_elements+1;
-		}
-		// O valor de offset é incrementado com o tamanho do item anterior analisado
-		if(i <= schema->n_elements){
-			offset += node->size;
 		}
 	}
 
@@ -909,7 +880,8 @@ void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_off
 	void *aux2 = malloc(sizeof(double));
 	double distance = 0;
 
-	for(i = 0; i < schema->n_elements-2; i++){
+	// Analisa todos os elementos a partir do segundo (ignora id) ate antes da classe
+	for(i = 0; i < schema->n_elements-3; i++){
 		node = node->next;
 		if(node->id == INT_T || node->id == DOUBLE_T){
 			fseek(fp_data, cur_offset+node->offset, SEEK_SET);
@@ -925,7 +897,7 @@ void get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_off
 	}
 	free(aux1);
 	free(aux2);
-	node = node->next;
+	node = node->next->next;
 	distance = sqrt(distance);
 	fseek(fp_data, cur_offset+node->offset, SEEK_SET);
 	fwrite(&distance, node->size, 1, fp_data);
@@ -997,4 +969,149 @@ void save_temporary_input(SCHEMA *schema){
 		free(aux);
 	}
 	fclose(fp_temp);
+}
+
+void get_class(SCHEMA *schema, int n){
+	int n_elements, i, j, *counter = NULL, n_classes, max_count, draw, max_pos;
+	FILE *fp_temp = open_temp(schema, "r+b");
+	FILE *fp_data = open_data(schema, "r+b", &n_elements);
+	FILE *fp_index;
+	NODE *class = schema->sentry->previous->previous;
+	void **classes_found = NULL, *aux;
+	long int location, data_size = schema->sentry->previous->size + sizeof(long int);
+	double a, b;
+	char *aux_string = NULL;
+
+	update_distances(schema);
+	get_index(schema);
+	sort_index(schema);
+	fp_index = open_index(schema, schema->sentry->previous, "rb", &i);
+
+	// Le os n elementos mais proximos e conta quantas vezes cada classe aparece
+	n_classes = 0;
+	for(i = 0; i < n_elements && i < n; i++){
+		fseek(fp_index, (i*data_size)+schema->sentry->previous->size, SEEK_SET);
+		fread(&location, sizeof(long int), 1, fp_index);
+		fseek(fp_data, location+class->offset, SEEK_SET);
+		aux = malloc(class->size);
+		// Aux armazena o novo elemento lido
+		fread(aux, class->size, 1, fp_data);
+		// O que foi lido por aux é convertido para char* em aux_string para permitir o uso da funcao compare_outside
+		void_to_string(class, aux, &aux_string);
+		// O vetor de ponteiros classes_found armazena todas as classes lidas e n_classes conta quantas foram lidas
+		for(j = 0; j < n_classes; j++){
+			// O vetor com as classes ja lidas é percorrido para saber se foi encontrada uma nova classe
+			if(compare_outside(class, classes_found[j], aux_string) == 0){
+				//  Caso seja encontrado, a memoria alocada por aux e liberada,
+				free(aux);
+				//  o contador da posicao equivalente é incrementado,
+				counter[j]++;
+				// E o programa sai do for
+				break;
+			}
+		}
+		// Caso o valor lido seja um valor novo
+		if(j == n_classes){
+			// Aloca-se a memoria para armazenar o novo valor
+			classes_found = realloc(classes_found, sizeof(void*) * (n_classes+1));
+			// e a memoria necessaria para o contador, inicializando-o como 1 na posicao correspondente
+			counter = realloc(counter, sizeof(int) * (n_classes+1));
+			counter[n_classes] = 1;
+			// E a nova posicao o recebe
+			classes_found[n_classes++] = aux;
+		}
+	}
+
+	// Analisa os resultados da checagem acima para ver qual a classe que mais foi encontrada e se houve empate
+	max_count = 0;
+	for(i = 0; i < n_classes; i++){
+		if(counter[i] > max_count){
+			draw = 0;
+			max_count = counter[i];
+			max_pos = i;
+		}else if(counter[i] == max_count){
+			draw = 1;
+		}
+	}
+	free(counter);
+
+	// A variavel aux aloca a memoria necessaria, pois ela guardara a classe a ser escrita no arquivo;
+	aux = malloc(class->size);
+	// Caso haja empate checa o vizinho mais proximo
+	if(draw){
+		// Libera todos os espaços alocados de classes_found menos o primeiro
+		for(i = n_classes-1; i > 0; i--){
+			free(classes_found[i]);
+		}
+		
+		// Procura o primeiro elemento e o armazena a classe na variavel aux
+		fseek(fp_index, schema->sentry->previous->size, SEEK_SET);
+		fread(&location, sizeof(long int), 1, fp_index);
+		fseek(fp_data, location+class->offset, SEEK_SET);
+		fread(aux, class->size, 1, fp_data);
+		void_to_string(class, aux, &aux_string);
+		for(i = 1; i < n_elements && i < n; i++){
+			// Começando no segundo elemento, checa se a distancia atual e igual a distancia anterior
+			fseek(fp_index, (i-1)*data_size, SEEK_SET);
+			fread(&a, sizeof(double), 1, fp_index);
+			fseek(fp_index, (i*data_size), SEEK_SET);
+			fread(&b, sizeof(double), 1, fp_index);
+			// Caso a distancia seja igual armazena a nova classe no primeiro espaço de classes_found, que n havia sido liberado
+			if(a == n){
+				fread(&location, sizeof(long int), 1, fp_index);
+				fseek(fp_data, location+class->offset, SEEK_SET);
+				fread(classes_found[0], class->size, 1, fp_data);
+				// Checa qual dos dois vez primeiro em ordem alfabetica e, caso o novo venha primeiro...
+				if(compare_outside(class, classes_found[0], aux_string) < 0){
+					// Sobrescreve a informacao salva em aux
+					memcpy(aux, classes_found[0], class->size);
+					void_to_string(class, aux, &aux_string);
+				}
+			// Caso nao seja, sai da repeticao
+			}else break;
+		}
+		// Ao sair da repeticao, aux tera a classe a ser salva de acordo com os criterios de desempate definidos
+		// Mas antes deve-se liberar a memoria ainda alocada por classes_found
+		free(classes_found[0]);
+		free(classes_found);
+	// Caso contrario copia a classe a ser salva para aux e libera a memoria alocada por classes_found
+	}else{
+		memcpy(aux, classes_found[max_pos], class->size);
+		for(i = 0; i < n_classes; i++){
+			free(classes_found[i]);
+		}
+		free(classes_found);
+	}
+
+	// Nesse ponto a variavel aux armazena a classe do novo elemento
+	if(class->id == STRING_T){
+		printf("%s\n", (char*)aux);
+	}else if(class->id == INT_T){
+		printf("%d\n", *((int*)aux));
+	}else if(class->id == DOUBLE_T){
+		printf("%.2lf\n", *((double*)aux));
+	}
+	// A variavel double a armazena a distancia do novo elemento (0)
+	a = 0.0;
+	fseek(fp_temp, 0, SEEK_END);
+	// A nova classe e a distancia são escritas no fim do arquivo .temp
+	fwrite(aux, class->size, 1, fp_temp);
+	fwrite(&a, sizeof(double), 1, fp_temp);
+	// A memoria alocada por aux é liberada
+	free(aux);
+	// E agora ele aloca memoria necessaria para armazenar todo o registro
+	aux = malloc(schema->size);
+	// O conteudo do arquivo .temp ,que agora possui todos os campos do novo elemento, é copiado
+	fseek(fp_temp, 0, SEEK_SET);
+	fread(aux, schema->size, 1, fp_temp);
+	// E escrito no fim do arquivo .data
+	fseek(fp_data, 0, SEEK_END);
+	fwrite(aux, schema->size, 1, fp_data);
+
+	// A memoria alocada é então liberada
+	free(aux);
+	free(aux_string);
+	fclose(fp_temp);
+	fclose(fp_data);
+	fclose(fp_index);
 }

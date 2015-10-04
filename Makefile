@@ -13,11 +13,13 @@ main:
 clean:
 	rm -f *.o
 	rm -f program
+	clear
 
 run:
 	./program
 
 .zip:
 	zip trabalho4.zip *.c *.h Makefile
-debug:
+
+debug: all
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./program < case.in
